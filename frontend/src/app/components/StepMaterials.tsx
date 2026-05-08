@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus,
   Trash2,
@@ -126,6 +127,16 @@ function SectionCard({
   onDelete: () => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number } | null>(null);
+
+  function openAdd() {
+    if (addBtnRef.current) {
+      const r = addBtnRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left });
+    }
+    setAddOpen(true);
+  }
 
   const updateRow = (i: number, r: QuoteRow) => {
     const rows = [...section.rows];
@@ -268,48 +279,49 @@ function SectionCard({
             </div>
           )}
 
-          {/* Add row dropdown */}
-          <div className="relative pt-1">
+          {/* Add row dropdown — rendered via portal so overflow-y-auto doesn't clip it */}
+          <div className="pt-1">
             <button
-              onClick={() => setAddOpen((o) => !o)}
+              ref={addBtnRef}
+              onClick={openAdd}
               className="text-sm text-gray-500 hover:text-green-700 py-1 flex items-center gap-1.5 transition-colors"
             >
               <Plus size={14} /> Lägg till rad
               <ChevronDown size={12} className={addOpen ? "rotate-180" : ""} />
             </button>
-            {addOpen && (
+            {addOpen && dropPos && createPortal(
               <>
                 <div
-                  className="fixed inset-0 z-10"
+                  className="fixed inset-0 z-40"
                   onClick={() => setAddOpen(false)}
                 />
-                <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden min-w-[200px]">
+                <div
+                  className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden min-w-[220px]"
+                  style={{ top: dropPos.top, left: dropPos.left }}
+                >
                   <button
                     onClick={addRow}
-                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
-                    <Package size={14} className="text-gray-500" />
+                    <Package size={15} className="text-gray-500 shrink-0" />
                     <span>
                       <span className="font-semibold text-gray-900">Material</span>
-                      <span className="text-xs text-gray-500 block">
-                        Vara, mängd och enhet
-                      </span>
+                      <span className="text-xs text-gray-500 block">Vara, mängd och enhet</span>
                     </span>
                   </button>
                   <button
                     onClick={addLabor}
-                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-amber-50 flex items-center gap-2 border-t border-gray-100"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-amber-50 flex items-center gap-3 border-t border-gray-100"
                   >
-                    <Hammer size={14} className="text-amber-600" />
+                    <Hammer size={15} className="text-amber-600 shrink-0" />
                     <span>
                       <span className="font-semibold text-gray-900">Arbete</span>
-                      <span className="text-xs text-gray-500 block">
-                        Typ, timmar och timpris
-                      </span>
+                      <span className="text-xs text-gray-500 block">Typ, timmar och timpris</span>
                     </span>
                   </button>
                 </div>
-              </>
+              </>,
+              document.body
             )}
           </div>
 
