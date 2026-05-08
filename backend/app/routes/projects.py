@@ -103,7 +103,7 @@ async def upload_project_files(pid: str, files: List[UploadFile] = File(...)):
                 p["files"].append({"kind": "text", "name": name, "text": txt})
                 # Also render pages as images so Claude vision can read drawings/plans
                 try:
-                    for img in extract_pdf_pages_as_images(data, max_pages=4):
+                    for img in extract_pdf_pages_as_images(data, max_pages=15):
                         if image_count >= MAX_IMAGES:
                             break
                         p["files"].append(img)
