@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import chat, pdf
+from app.routes import chat, pdf, extract
 
 app = FastAPI(
     title="Majstor AI API",
@@ -22,6 +22,7 @@ app.add_middleware(
 
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(pdf.router, prefix="/api/pdf", tags=["pdf"])
+app.include_router(extract.router, prefix="/api/extract", tags=["extract"])
 
 
 @app.get("/health")
