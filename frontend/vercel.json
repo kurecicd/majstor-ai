@@ -1,12 +1,7 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "installCommand": "npm install",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "${BACKEND_URL}/api/:path*"
-    }
-  ]
+  "env": {
+    "NEXT_PUBLIC_BACKEND_URL": "https://majstor-ai-production.up.railway.app"
+  }
 }
