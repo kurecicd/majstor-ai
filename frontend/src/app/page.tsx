@@ -163,23 +163,48 @@ export default function Home() {
         body: JSON.stringify({ description: description.trim() }),
       });
       if (res.status === 404) {
-        // Server lost the project (and its files). Reset and ask user to re-upload.
         handleProjectGone();
         return;
       }
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || `HTTP ${res.status}`);
+        throw new Error((await res.text()) || `HTTP ${res.status}`);
       }
-      const data = await res.json();
-      const { quote: newQuote } = extractQuoteFromResponse(data.message);
+
+      // Read SSE stream — backend streams chunks so the connection stays
+      // alive even when Claude takes 60-120s on large PDFs.
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullMessage = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === "done") fullMessage = data.message;
+            if (data.type === "error") throw new Error(data.message);
+          } catch (parseErr) {
+            if (parseErr instanceof SyntaxError) continue;
+            throw parseErr;
+          }
+        }
+      }
+
+      if (!fullMessage) throw new Error("Inget svar från servern");
+
+      const { quote: newQuote } = extractQuoteFromResponse(fullMessage);
       if (newQuote && newQuote.sections.length > 0) {
         setQuote(newQuote);
         goTo(2);
       } else {
-        alert(
-          "Analysen gav inget materiallista. Lägg till mer information eller en bild."
-        );
+        alert("Analysen gav inget materiallista. Lägg till mer information eller en bild.");
       }
     } catch (err) {
       alert(`Analys misslyckades: ${(err as Error).message}`);

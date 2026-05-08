@@ -1,9 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import List, Dict, Optional
+from fastapi.responses import StreamingResponse
+from typing import List, Dict, Optional, Generator
 from pydantic import BaseModel
 import uuid
 import base64
 import mimetypes
+import json as json_lib
 import anthropic
 
 from app.config import get_settings
@@ -139,6 +141,30 @@ async def delete_project_file(pid: str, name: str):
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
 
 
+def _analyze_stream(client: anthropic.Anthropic, content: list) -> Generator[str, None, None]:
+    """Stream analyze response as SSE chunks so the connection stays alive
+    for long Claude calls (large PDFs can take 60-120s)."""
+    full_text = ""
+    try:
+        with client.messages.stream(
+            model="claude-opus-4-5",
+            max_tokens=2048,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+        ) as stream:
+            for text in stream.text_stream:
+                full_text += text
+                yield f"data: {json_lib.dumps({'type': 'chunk', 'text': text})}\n\n"
+        yield f"data: {json_lib.dumps({'type': 'done', 'message': full_text})}\n\n"
+    except anthropic.APIError as e:
+        yield f"data: {json_lib.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+
+# Max chars of text sent to Claude per file — large PDFs get truncated here,
+# not at upload time, so the stored project keeps the full extraction.
+_ANALYZE_TEXT_LIMIT = 30_000
+
+
 @router.post("/{pid}/analyze")
 async def analyze_project(pid: str, body: Optional[AnalyzeRequest] = None):
     p = _projects.get(pid)
@@ -159,19 +185,20 @@ async def analyze_project(pid: str, body: Optional[AnalyzeRequest] = None):
                 "source": {"type": "base64", "media_type": f["media_type"], "data": f["data"]},
             })
         elif f["kind"] == "text":
-            content.append({"type": "text", "text": f"--- {f['name']} ---\n{f['text']}"})
+            # Truncate large files so Claude gets focused context, not noise
+            text = f["text"][:_ANALYZE_TEXT_LIMIT]
+            content.append({"type": "text", "text": f"--- {f['name']} ---\n{text}"})
 
     if description:
         content.append({"type": "text", "text": f"Project description from user:\n{description}"})
 
     content.append({"type": "text", "text": ANALYZE_PROMPT})
 
-    response = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
+    return StreamingResponse(
+        _analyze_stream(client, content),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable Railway/nginx buffering
+        },
     )
-
-    text_parts = [b.text for b in response.content if getattr(b, "type", None) == "text"]
-    return {"message": "".join(text_parts) or ""}
