@@ -7,6 +7,7 @@ import mimetypes
 import anthropic
 
 from app.config import get_settings
+from app import storage
 from app.routes.extract import (
     _ext,
     extract_pdf,
@@ -21,8 +22,9 @@ from app.routes.chat import SYSTEM_PROMPT
 
 router = APIRouter()
 
-# In-memory project store — persists for the lifetime of the process
-_projects: Dict[str, dict] = {}
+# In-memory project cache, hydrated from disk at import time. Every mutating
+# endpoint persists the affected project back to disk via storage.save_one.
+_projects: Dict[str, dict] = storage.load_all()
 
 ANALYZE_PROMPT = """Carefully analyze ALL uploaded files and images for this construction/renovation project.
 
@@ -52,6 +54,7 @@ class AnalyzeRequest(BaseModel):
 async def create_project(body: ProjectCreate):
     pid = str(uuid.uuid4())
     _projects[pid] = {"id": pid, "name": body.name, "files": []}
+    storage.save_one(_projects[pid])
     return {"id": pid, "name": body.name}
 
 
@@ -120,6 +123,7 @@ async def upload_project_files(pid: str, files: List[UploadFile] = File(...)):
         except Exception as e:
             p["files"].append({"kind": "error", "name": name, "text": f"[Failed to parse {name}: {e}]"})
 
+    storage.save_one(p)
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
 
 
@@ -130,6 +134,7 @@ async def delete_project_file(pid: str, name: str):
     if not p:
         raise HTTPException(404, "Project not found")
     p["files"] = [f for f in p["files"] if f["name"] != name]
+    storage.save_one(p)
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
 
 

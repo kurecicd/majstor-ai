@@ -1,8 +1,19 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app import storage
 from app.routes import chat, pdf, extract, projects, scrape, search
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("majstor")
+logger.info(
+    "Project storage at %s — %d project(s) loaded",
+    storage.storage_path(),
+    len(projects._projects),
+)
 
 app = FastAPI(
     title="Majstor AI API",

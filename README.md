@@ -107,3 +107,23 @@ Pushes to `main` trigger:
 - `frontend/**` changes → Vercel deploy via CLI (requires `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`)
 
 Backend health check is wired to `/health` with `ON_FAILURE` restart (max 5).
+
+### Project persistence (Railway volume)
+
+Projects are written to disk as one JSON file per project (atomic temp-file
++ rename). Storage path:
+- `PROJECTS_DIR` env var if set
+- `/data/projects` when `/data` exists (Railway volume mount convention)
+- `./data/projects` otherwise (local dev)
+
+**On Railway you MUST attach a volume** at mount path `/data` for projects to
+survive across deploys. Without it the container's filesystem is ephemeral
+and projects vanish on every redeploy.
+
+Configure in the Railway dashboard:
+- Service → Settings → Volumes → Add volume
+- Mount path: `/data`
+- Size: 1 GB is plenty for now (each project is well under 25 MB)
+
+Verify on the next backend deploy: the container logs print
+`Project storage at /data/projects — N project(s) loaded` on startup.

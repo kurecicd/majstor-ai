@@ -20,6 +20,10 @@ build/
 # Logs
 *.log
 
+# Local persistence (projects + uploaded files)
+data/
+backend/data/
+
 # OS
 .DS_Store
 Thumbs.db
