@@ -108,22 +108,20 @@ Pushes to `main` trigger:
 
 Backend health check is wired to `/health` with `ON_FAILURE` restart (max 5).
 
-### Project persistence (Railway volume)
+### Project persistence (SQLite + Railway volume)
 
-Projects are written to disk as one JSON file per project (atomic temp-file
-+ rename). Storage path:
-- `PROJECTS_DIR` env var if set
-- `/data/projects` when `/data` exists (Railway volume mount convention)
-- `./data/projects` otherwise (local dev)
+Projects are stored in a single SQLite file (`majstor.db`). Path resolution:
+- `MAJSTOR_DB_PATH` env var if set
+- `/data/majstor.db` when `/data` exists (Railway volume mount)
+- `./data/majstor.db` otherwise (local dev)
 
-**On Railway you MUST attach a volume** at mount path `/data` for projects to
-survive across deploys. Without it the container's filesystem is ephemeral
-and projects vanish on every redeploy.
+The Railway volume is declared in [railway.toml](railway.toml) under
+`[[mounts]]` so it's provisioned automatically on every deploy — no
+dashboard step needed.
 
-Configure in the Railway dashboard:
-- Service → Settings → Volumes → Add volume
-- Mount path: `/data`
-- Size: 1 GB is plenty for now (each project is well under 25 MB)
+Each project is a single row with a JSON-encoded `data` blob (id, name,
+files[]) — same shape as the in-memory dict. Files (incl. base64-encoded
+images) live inline in the blob.
 
-Verify on the next backend deploy: the container logs print
-`Project storage at /data/projects — N project(s) loaded` on startup.
+Verify on backend startup: the container logs print
+`Project storage at /data/majstor.db — N project(s) loaded`.
