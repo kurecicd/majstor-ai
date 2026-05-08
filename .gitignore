@@ -21,3 +21,12 @@ build/
 
 # OS
 .DS_Store
+Thumbs.db
+
+# macOS duplicates / editor backups
+* 2.tsx
+* 2.ts
+* 2.js
+* 2.py
+*.orig
+*~
