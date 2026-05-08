@@ -44,10 +44,12 @@ async def chat(request: ChatRequest):
             model="claude-opus-4-5",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
-        # Concatenate all text blocks in case the model returns multiple
-        text_parts = [b.text for b in response.content if getattr(b, "type", None) == "text"]
-        return ChatResponse(message="".join(text_parts) or "" for m in request.messages],
+            messages=[{"role": m.role, "content": m.content} for m in request.messages],
         )
-        return ChatResponse(message=response.content[0].text)
+        # Concatenate all text blocks (model may return multiple)
+        text_parts = [
+            b.text for b in response.content if getattr(b, "type", None) == "text"
+        ]
+        return ChatResponse(message="".join(text_parts) or "")
     except anthropic.APIError as e:
         raise HTTPException(status_code=502, detail=f"Claude API error: {str(e)}")
