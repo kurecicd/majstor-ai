@@ -235,12 +235,16 @@ export default function Home() {
 
       const { quote: newQuote } = extractQuoteFromResponse(fullMessage);
       if (newQuote && newQuote.sections.length > 0) {
-        setAnalyzeHint(null);
         setQuote(newQuote);
         saveQuoteToBackend(newQuote);
         goTo(2);
+      } else if (fullMessage.length > 100) {
+        // Claude analysed but QUOTE block was missing (token limit etc.)
+        // Go to step 2 with empty quote — user can add rows manually
+        setQuote({ sections: [] });
+        goTo(2);
       } else {
-        setAnalyzeHint(fullMessage || "AI:n kunde inte skapa en materiallista. Lägg till en beskrivning och försök igen.");
+        setAnalyzeHint("AI:n fick inget svar. Kontrollera att filen innehåller relevant innehåll och försök igen.");
       }
     } catch (err) {
       alert(`Analys misslyckades: ${(err as Error).message}`);

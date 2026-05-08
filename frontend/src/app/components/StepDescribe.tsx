@@ -227,16 +227,11 @@ export default function StepDescribe({
         )}
       </div>
 
-      {/* Hint from failed analysis */}
+      {/* Hint shown only when Claude truly failed (empty/no response) */}
       {analyzeHint && (
-        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-2">
-          <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm">
-            <AlertTriangle size={15} />
-            AI kunde inte skapa en materiallista — läs svaret nedan och lägg till en beskrivning
-          </div>
-          <div className="text-xs text-amber-900 bg-amber-100 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
-            {analyzeHint}
-          </div>
+        <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 flex items-start gap-2 text-sm text-amber-800">
+          <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+          {analyzeHint}
         </div>
       )}
 

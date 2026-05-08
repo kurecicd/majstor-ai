@@ -41,7 +41,8 @@ For EACH area of work you identify:
 3. Suggest labor hours and labor type — in Swedish
 
 Be practical and complete — include all materials needed.
-Always append the complete <<<QUOTE>>> block covering ALL sections and ALL materials."""
+Keep any human-readable description SHORT (max 3-4 sentences per section summary) — the <<<QUOTE>>> block is the priority and must always be included in full.
+The <<<QUOTE>>> block is MANDATORY — generate it even if the human-readable part is truncated."""
 
 
 class ProjectCreate(BaseModel):
@@ -242,24 +243,27 @@ def _analyze_stream(client: anthropic.Anthropic, content: list) -> Generator[str
             if batch_idx == 0:
                 batch_content.extend(prefix_items)
             else:
+                # Batch 2+: QUOTE block only — no prose, saves tokens
                 batch_content.append({
                     "type": "text",
                     "text": (
-                        f"Batch {batch_idx + 1}/{len(batches)}: additional pages from the same project. "
-                        "Extract any NEW materials or work areas not already listed. "
-                        "Return a <<<QUOTE>>> block with ALL sections found in these pages."
+                        f"Batch {batch_idx + 1}/{len(batches)}: more pages from the same project. "
+                        "Return ONLY the <<<QUOTE>>> block with any NEW materials found. No other text."
                     ),
                 })
-                # Keepalive so Railway doesn't cut the idle connection
                 yield ": next-batch\n\n"
 
             batch_content.extend(img_batch)
             batch_content.append(prompt_item)
 
+            # Batch 1: 4096 tokens — room for both readable text AND the QUOTE block
+            # Batch 2+: 2048 tokens — QUOTE-only so it always fits
+            max_tok = 4096 if batch_idx == 0 else 2048
+
             batch_text = ""
             with client.messages.stream(
                 model="claude-opus-4-5",
-                max_tokens=2048,
+                max_tokens=max_tok,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": batch_content}],
             ) as stream:
