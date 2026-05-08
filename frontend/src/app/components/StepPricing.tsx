@@ -472,15 +472,14 @@ function StoreCard({
               {fmt(option.price)} kr
             </span>
           ) : (
-            <span className="text-xs text-amber-600 shrink-0">
-              Inget pris hittat
-            </span>
+            <span className="text-xs text-gray-400 shrink-0">–</span>
           )}
         </div>
-        {option.source && (
-          <div className="text-xs text-gray-500 truncate" title={option.source}>
-            {option.source}
-          </div>
+        {hasPrice && (
+          <div className="text-[10px] text-gray-400">AI-uppskattning · klicka för att verifiera</div>
+        )}
+        {!hasPrice && option.source && (
+          <div className="text-xs text-gray-500 truncate">{option.source}</div>
         )}
         {option.url && (
           <a
@@ -500,9 +499,7 @@ function StoreCard({
         className={`text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors ${
           selected
             ? "bg-green-600 text-white"
-            : hasPrice
-            ? "bg-gray-900 text-white hover:bg-gray-700"
-            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            : "bg-gray-900 text-white hover:bg-gray-700"
         }`}
       >
         {selected ? "Vald" : "Välj"}
