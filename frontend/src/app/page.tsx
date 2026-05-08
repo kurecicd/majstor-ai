@@ -31,6 +31,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [analyzeHint, setAnalyzeHint] = useState<string | null>(null);
 
   // ── Restore project on mount ────────────────────────────────────────────
   useEffect(() => {
@@ -201,10 +202,12 @@ export default function Home() {
 
       const { quote: newQuote } = extractQuoteFromResponse(fullMessage);
       if (newQuote && newQuote.sections.length > 0) {
+        setAnalyzeHint(null);
         setQuote(newQuote);
         goTo(2);
       } else {
-        alert("Analysen gav inget materiallista. Lägg till mer information eller en bild.");
+        // Show Claude's actual response so the user can read it and add context
+        setAnalyzeHint(fullMessage || "AI:n kunde inte skapa en materiallista. Lägg till en beskrivning och försök igen.");
       }
     } catch (err) {
       alert(`Analys misslyckades: ${(err as Error).message}`);
@@ -257,10 +260,11 @@ export default function Home() {
             projectName={projectName}
             onProjectNameChange={setProjectName}
             description={description}
-            onDescriptionChange={setDescription}
+            onDescriptionChange={(s) => { setDescription(s); setAnalyzeHint(null); }}
             storedFiles={storedFiles}
             uploading={uploading}
             analyzing={analyzing}
+            analyzeHint={analyzeHint}
             onUpload={uploadFiles}
             onDeleteFile={deleteFile}
             onAnalyze={analyze}

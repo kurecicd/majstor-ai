@@ -30,6 +30,32 @@ def extract_pdf(data: bytes) -> str:
     return "\n".join(parts)
 
 
+def extract_pdf_pages_as_images(data: bytes, max_pages: int = 4, dpi: int = 120) -> list[dict]:
+    """Render PDF pages to JPEG images using PyMuPDF for Claude vision.
+
+    Returns a list of image dicts compatible with the project files schema.
+    Fails silently — caller should catch exceptions and fall back to text-only.
+    """
+    import fitz  # PyMuPDF
+    doc = fitz.open(stream=data, filetype="pdf")
+    pages = min(len(doc), max_pages)
+    matrix = fitz.Matrix(dpi / 72, dpi / 72)
+    out = []
+    for i in range(pages):
+        page = doc.load_page(i)
+        pix = page.get_pixmap(matrix=matrix, colorspace=fitz.csRGB)
+        jpeg_bytes = pix.tobytes("jpeg", jpg_quality=75)
+        b64 = base64.b64encode(jpeg_bytes).decode("ascii")
+        out.append({
+            "kind": "image",
+            "name": f"pdf_page_{i + 1}.jpg",
+            "media_type": "image/jpeg",
+            "data": b64,
+        })
+    doc.close()
+    return out
+
+
 def extract_docx(data: bytes) -> str:
     doc = Document(io.BytesIO(data))
     parts = [p.text for p in doc.paragraphs if p.text]

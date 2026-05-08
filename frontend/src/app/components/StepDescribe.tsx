@@ -16,6 +16,7 @@ import {
   Loader2,
   Zap,
   HardHat,
+  AlertTriangle,
 } from "lucide-react";
 
 export interface StoredFile {
@@ -31,6 +32,7 @@ export default function StepDescribe({
   storedFiles,
   uploading,
   analyzing,
+  analyzeHint,
   onUpload,
   onDeleteFile,
   onAnalyze,
@@ -42,6 +44,7 @@ export default function StepDescribe({
   storedFiles: StoredFile[];
   uploading: boolean;
   analyzing: boolean;
+  analyzeHint: string | null;
   onUpload: (files: FileList | File[]) => void;
   onDeleteFile: (name: string) => void;
   onAnalyze: () => void;
@@ -223,6 +226,19 @@ export default function StepDescribe({
           </div>
         )}
       </div>
+
+      {/* Hint from failed analysis */}
+      {analyzeHint && (
+        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm">
+            <AlertTriangle size={15} />
+            AI kunde inte skapa en materiallista — läs svaret nedan och lägg till en beskrivning
+          </div>
+          <div className="text-xs text-amber-900 bg-amber-100 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
+            {analyzeHint}
+          </div>
+        </div>
+      )}
 
       {/* Analyze */}
       <button

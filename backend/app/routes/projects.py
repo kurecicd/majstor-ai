@@ -13,6 +13,7 @@ from app import storage
 from app.routes.extract import (
     _ext,
     extract_pdf,
+    extract_pdf_pages_as_images,
     extract_docx,
     extract_xlsx,
     extract_text_bytes,
@@ -100,6 +101,15 @@ async def upload_project_files(pid: str, files: List[UploadFile] = File(...)):
             if ext == "pdf" or ctype == "application/pdf":
                 txt = extract_pdf(data)[:MAX_TEXT_PER_FILE]
                 p["files"].append({"kind": "text", "name": name, "text": txt})
+                # Also render pages as images so Claude vision can read drawings/plans
+                try:
+                    for img in extract_pdf_pages_as_images(data, max_pages=4):
+                        if image_count >= MAX_IMAGES:
+                            break
+                        p["files"].append(img)
+                        image_count += 1
+                except Exception:
+                    pass  # fall back to text-only if rendering fails
             elif ext == "docx":
                 txt = extract_docx(data)[:MAX_TEXT_PER_FILE]
                 p["files"].append({"kind": "text", "name": name, "text": txt})
