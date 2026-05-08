@@ -57,8 +57,7 @@ export default function Home() {
 
   // ── Project helpers ─────────────────────────────────────────────────────
 
-  async function ensureProject(): Promise<Project> {
-    if (project) return project;
+  async function createProject(): Promise<Project> {
     const name =
       projectName.trim() ||
       `Projekt ${new Date().toLocaleDateString("sv-SE")}`;
@@ -73,6 +72,23 @@ export default function Home() {
     if (!projectName.trim()) setProjectName(p.name);
     localStorage.setItem("majstor_project", JSON.stringify(p));
     return p;
+  }
+
+  async function ensureProject(): Promise<Project> {
+    if (project) return project;
+    return createProject();
+  }
+
+  function handleProjectGone() {
+    setProject(null);
+    setStoredFiles([]);
+    setQuote(null);
+    localStorage.removeItem("majstor_project");
+    setStep(1);
+    setFurthest(1);
+    alert(
+      "Servern startade om och förlorade dina filer. Ladda upp filerna igen och försök på nytt."
+    );
   }
 
   function newProject() {
@@ -93,13 +109,24 @@ export default function Home() {
     if (!arr.length) return;
     setUploading(true);
     try {
-      const p = await ensureProject();
-      const fd = new FormData();
-      for (const f of arr) fd.append("files", f, f.name);
-      const res = await fetch(`${BACKEND}/api/projects/${p.id}/files`, {
+      let p = await ensureProject();
+      const fd = () => {
+        const f = new FormData();
+        for (const file of arr) f.append("files", file, file.name);
+        return f;
+      };
+      let res = await fetch(`${BACKEND}/api/projects/${p.id}/files`, {
         method: "POST",
-        body: fd,
+        body: fd(),
       });
+      if (res.status === 404) {
+        // Server lost the project — recreate and retry once
+        p = await createProject();
+        res = await fetch(`${BACKEND}/api/projects/${p.id}/files`, {
+          method: "POST",
+          body: fd(),
+        });
+      }
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
       const data = await res.json();
       setStoredFiles(data.files);
@@ -116,6 +143,10 @@ export default function Home() {
       `${BACKEND}/api/projects/${project.id}/files?name=${encodeURIComponent(name)}`,
       { method: "DELETE" }
     );
+    if (res.status === 404) {
+      handleProjectGone();
+      return;
+    }
     const data = await res.json();
     setStoredFiles(data.files);
   }
@@ -131,6 +162,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: description.trim() }),
       });
+      if (res.status === 404) {
+        // Server lost the project (and its files). Reset and ask user to re-upload.
+        handleProjectGone();
+        return;
+      }
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(errText || `HTTP ${res.status}`);
