@@ -26,16 +26,17 @@ router = APIRouter()
 # endpoint persists the affected project back to disk via storage.save_one.
 _projects: Dict[str, dict] = storage.load_all()
 
-ANALYZE_PROMPT = """Carefully analyze ALL uploaded files and images for this construction/renovation project.
+ANALYZE_PROMPT = """Analyze this construction/renovation project based on the description and/or uploaded files provided.
+
+Even if only a text description is given (no files), generate a full material list and cost estimate.
 
 For EACH area of work you identify:
-1. Name the section clearly
-2. Describe exactly what work needs to be done
-3. List all materials with quantities, dimensions/specs, and estimated SEK prices (excl. VAT)
-4. Note any important observations or constraints
+1. Name the section clearly (in Swedish)
+2. List all materials with realistic quantities, dimensions/specs, and estimated SEK prices (excl. VAT)
+3. Suggest labor hours for each section
 
-Be thorough — include EVERYTHING visible in the files/images.
-Then append the complete <<<QUOTE>>> block covering ALL sections and ALL materials."""
+Be practical and complete — include all materials needed.
+Always append the complete <<<QUOTE>>> block covering ALL sections and ALL materials, even when working from description only."""
 
 
 class ProjectCreate(BaseModel):
