@@ -10,6 +10,8 @@ import {
   Hammer,
   Package,
   ArrowRight,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 import {
   Quote,
@@ -347,9 +349,11 @@ function MaterialEditRow({
   onChange: (r: QuoteRow) => void;
   onDelete: () => void;
 }) {
+  const [showUrl, setShowUrl] = useState(!!row.url);
+
   return (
-    <div className="group bg-gray-50 hover:bg-gray-100/70 rounded-lg px-2 py-1.5 transition-colors">
-      <div className="grid grid-cols-[1fr_72px_72px_24px] gap-1.5 items-center text-sm">
+    <div className="group bg-gray-50 hover:bg-gray-100/70 rounded-lg px-2 py-1.5 transition-colors space-y-1">
+      <div className="grid grid-cols-[1fr_72px_60px_20px_20px] gap-1.5 items-center text-sm">
         <input
           value={row.name}
           onChange={(e) => onChange({ ...row, name: e.target.value })}
@@ -373,6 +377,13 @@ function MaterialEditRow({
           placeholder="st"
         />
         <button
+          onClick={() => setShowUrl((v) => !v)}
+          className={`transition-colors ${row.url ? "text-blue-500" : "text-gray-300 group-hover:text-gray-400"}`}
+          title="Produktlänk"
+        >
+          <Link2 size={13} />
+        </button>
+        <button
           onClick={onDelete}
           className="text-gray-300 group-hover:text-red-400 hover:!text-red-600 transition-colors"
           title="Ta bort"
@@ -380,6 +391,29 @@ function MaterialEditRow({
           <Trash2 size={13} />
         </button>
       </div>
+
+      {showUrl && (
+        <div className="flex items-center gap-1.5 pl-1">
+          <input
+            type="url"
+            value={row.url || ""}
+            onChange={(e) => onChange({ ...row, url: e.target.value })}
+            placeholder="https://www.bauhaus.se/..."
+            className="flex-1 bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          {row.url && (
+            <a
+              href={row.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:text-blue-700 shrink-0"
+              title="Öppna länk"
+            >
+              <ExternalLink size={13} />
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }

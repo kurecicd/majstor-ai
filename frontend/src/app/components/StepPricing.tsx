@@ -476,20 +476,18 @@ function StoreCard({
           )}
         </div>
         {hasPrice && (
-          <div className="text-[10px] text-gray-400">AI-uppskattning · klicka för att verifiera</div>
-        )}
-        {!hasPrice && option.source && (
-          <div className="text-xs text-gray-500 truncate">{option.source}</div>
+          <div className="text-[10px] text-gray-400 mt-0.5">AI-uppskattning</div>
         )}
         {option.url && (
           <a
             href={option.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-0.5 mt-0.5"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors"
           >
-            {hasPrice ? "Visa produkt" : "Sök i butiken"}{" "}
             <ExternalLink size={10} />
+            {hasPrice ? "Verifiera i butik" : "Sök i butiken"}
           </a>
         )}
       </div>
