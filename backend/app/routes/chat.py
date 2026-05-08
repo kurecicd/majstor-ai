@@ -21,14 +21,16 @@ Be practical and concise. Show quantity and price per unit for each material.
 STRUCTURED OUTPUT RULE: Whenever your response includes any material/cost list or price estimate, you MUST append a machine-readable quote block at the very end of your response. Nothing may follow after <<<END_QUOTE>>>.
 
 <<<QUOTE>>>
-{"sections":[{"name":"Section Name","items":[{"name":"Product full name with specs/dimensions","qty":10,"unit":"kom","stores":[{"name":"Bauhaus","price":185},{"name":"Hornbach","price":179},{"name":"Byggmax","price":192}]}]}]}
+{"sections":[{"name":"Section Name","items":[{"name":"Product full name with specs/dimensions","qty":10,"unit":"kom","stores":[{"name":"Bauhaus","price":185,"source":"Bauhaus.se catalog 2026","url":"https://www.bauhaus.se/..."},{"name":"Hornbach","price":179,"source":"Hornbach.se","url":"https://www.hornbach.se/..."},{"name":"Byggmax","price":192,"source":"market estimate"}]}],"labor":[{"name":"Carpentry","hours":8,"rate":450}]}]}
 <<<END_QUOTE>>>
 
 Rules for the quote block:
 - Compact single-line JSON, no line breaks inside
 - Include ALL items from your material list
 - 2-3 real Swedish stores per item with realistic SEK prices (excl. VAT)
-- Omit the block entirely for pure Q&A responses that have no material/cost estimates
+- For EACH store entry, include a "source" field explaining where the price came from (e.g. store catalog, prior project, market estimate). Add a "url" field to a real product page when you know one — otherwise omit url
+- Add a "labor" array per section listing distinct work types (e.g. carpentry, painting, electrical) with realistic hour estimates and a default rate of 450 kr/h. Omit if labor is irrelevant
+- Omit the entire block for pure Q&A responses that have no material/cost estimates
 """
 
 

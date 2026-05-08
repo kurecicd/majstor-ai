@@ -721,7 +721,7 @@ export default function Home() {
 
       {/* ── Quote panel ── */}
       {showQuote && quote && (
-        <div className="w-[460px] flex-shrink-0 flex flex-col border-l border-gray-200 overflow-hidden">
+        <div className="w-[560px] flex-shrink-0 flex flex-col border-l border-gray-200 overflow-hidden">
           <QuotePanel quote={quote} onChange={setQuote} />
         </div>
       )}
