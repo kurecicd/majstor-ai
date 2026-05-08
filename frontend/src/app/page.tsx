@@ -5,8 +5,10 @@ import { HardHat } from "lucide-react";
 import {
   Quote,
   extractQuoteFromResponse,
+  parseAiQuote,
 } from "./components/QuotePanel";
 import Stepper, { WizardStep } from "./components/Stepper";
+import StepProjects from "./components/StepProjects";
 import StepDescribe, { StoredFile } from "./components/StepDescribe";
 import StepMaterials from "./components/StepMaterials";
 import StepPricing from "./components/StepPricing";
@@ -20,8 +22,11 @@ interface Project {
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
+type AppStep = "projects" | WizardStep;
+
 export default function Home() {
-  const [step, setStep] = useState<WizardStep>(1);
+  const [step, setStep] = useState<AppStep>("projects");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [furthest, setFurthest] = useState<WizardStep>(1);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -33,28 +38,7 @@ export default function Home() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [analyzeHint, setAnalyzeHint] = useState<string | null>(null);
 
-  // ── Restore project on mount ────────────────────────────────────────────
-  useEffect(() => {
-    const saved = localStorage.getItem("majstor_project");
-    if (!saved) return;
-    try {
-      const p: Project = JSON.parse(saved);
-      fetch(`${BACKEND}/api/projects/${p.id}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data) {
-            setProject({ id: data.id, name: data.name });
-            setProjectName(data.name);
-            setStoredFiles(data.files);
-          } else {
-            localStorage.removeItem("majstor_project");
-          }
-        })
-        .catch(() => localStorage.removeItem("majstor_project"));
-    } catch {
-      localStorage.removeItem("majstor_project");
-    }
-  }, []);
+  // ── No localStorage restore on mount — project list is the landing page ─
 
   // ── Project helpers ─────────────────────────────────────────────────────
 
@@ -84,9 +68,9 @@ export default function Home() {
     setProject(null);
     setStoredFiles([]);
     setQuote(null);
-    localStorage.removeItem("majstor_project");
-    setStep(1);
+    setWizardStep(1);
     setFurthest(1);
+    setStep(1);
     alert(
       "Servern startade om och förlorade dina filer. Ladda upp filerna igen och försök på nytt."
     );
@@ -98,9 +82,58 @@ export default function Home() {
     setDescription("");
     setStoredFiles([]);
     setQuote(null);
-    setStep(1);
+    setAnalyzeHint(null);
+    setWizardStep(1);
     setFurthest(1);
-    localStorage.removeItem("majstor_project");
+    setStep(1);
+  }
+
+  function backToProjects() {
+    setProject(null);
+    setProjectName("");
+    setDescription("");
+    setStoredFiles([]);
+    setQuote(null);
+    setAnalyzeHint(null);
+    setWizardStep(1);
+    setFurthest(1);
+    setStep("projects");
+  }
+
+  async function resumeProject(id: string, hasQuote: boolean) {
+    try {
+      const res = await fetch(`${BACKEND}/api/projects/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setProject({ id: data.id, name: data.name });
+      setProjectName(data.name);
+      setStoredFiles(data.files || []);
+      if (hasQuote && data.saved_quote) {
+        setQuote(data.saved_quote as Quote);
+        setWizardStep(2);
+        setFurthest(2);
+        setStep(2);
+      } else {
+        setWizardStep(1);
+        setFurthest(1);
+        setStep(1);
+      }
+    } catch {
+      setStep(1);
+    }
+  }
+
+  async function saveQuoteToBackend(q: Quote) {
+    if (!project) return;
+    try {
+      await fetch(`${BACKEND}/api/projects/${project.id}/quote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quote: q }),
+      });
+    } catch {
+      // non-critical
+    }
   }
 
   // ── File operations ─────────────────────────────────────────────────────
@@ -204,9 +237,9 @@ export default function Home() {
       if (newQuote && newQuote.sections.length > 0) {
         setAnalyzeHint(null);
         setQuote(newQuote);
+        saveQuoteToBackend(newQuote);
         goTo(2);
       } else {
-        // Show Claude's actual response so the user can read it and add context
         setAnalyzeHint(fullMessage || "AI:n kunde inte skapa en materiallista. Lägg till en beskrivning och försök igen.");
       }
     } catch (err) {
@@ -219,42 +252,59 @@ export default function Home() {
   // ── Navigation ──────────────────────────────────────────────────────────
 
   function goTo(s: WizardStep) {
+    setWizardStep(s);
     setStep(s);
     setFurthest((f) => (s > f ? s : f));
   }
 
   // ── Render ──────────────────────────────────────────────────────────────
 
+  const inWizard = step !== "projects";
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex flex-col">
       {/* App header */}
       <header className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-3">
-        <div className="bg-green-700 text-white p-2 rounded-xl">
+        <button
+          onClick={inWizard ? backToProjects : undefined}
+          className={`bg-green-700 text-white p-2 rounded-xl ${inWizard ? "hover:bg-green-800 cursor-pointer" : ""}`}
+          title={inWizard ? "Tillbaka till projekt" : undefined}
+        >
           <HardHat size={20} />
-        </div>
+        </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-bold text-gray-900 truncate">
-            {projectName || "Majstor AI"}
+            {inWizard ? (projectName || "Nytt projekt") : "Majstor AI"}
           </h1>
           <p className="text-xs text-gray-500">
-            AI-assistent för svenska byggjobb
+            {inWizard ? "AI-assistent för svenska byggjobb" : "Välj ett projekt eller skapa ett nytt"}
           </p>
         </div>
-        {project && (
+        {inWizard && (
           <button
-            onClick={newProject}
+            onClick={backToProjects}
             className="text-xs text-gray-400 hover:text-gray-700 underline shrink-0"
           >
-            Nytt projekt
+            ← Alla projekt
           </button>
         )}
       </header>
 
-      {/* Stepper */}
-      <Stepper current={step} furthest={furthest} onJump={goTo} />
+      {/* Stepper — only shown inside wizard */}
+      {inWizard && (
+        <Stepper current={wizardStep} furthest={furthest} onJump={goTo} />
+      )}
 
       {/* Step body */}
       <main className="flex-1 overflow-y-auto">
+        {step === "projects" && (
+          <StepProjects
+            backend={BACKEND}
+            onResume={resumeProject}
+            onNew={newProject}
+          />
+        )}
+
         {step === 1 && (
           <StepDescribe
             projectName={projectName}
@@ -274,7 +324,7 @@ export default function Home() {
         {step === 2 && quote && (
           <StepMaterials
             quote={quote}
-            onChange={setQuote}
+            onChange={(q) => { setQuote(q); saveQuoteToBackend(q); }}
             onBack={() => goTo(1)}
             onContinue={() => goTo(3)}
           />
@@ -284,7 +334,7 @@ export default function Home() {
         {step === 3 && quote && (
           <StepPricing
             quote={quote}
-            onChange={setQuote}
+            onChange={(q) => { setQuote(q); saveQuoteToBackend(q); }}
             backend={BACKEND}
             onBack={() => goTo(2)}
             onContinue={() => goTo(4)}

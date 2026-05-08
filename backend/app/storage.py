@@ -57,7 +57,7 @@ def _get_conn() -> sqlite3.Connection:
 
 def load_all() -> Dict[str, dict]:
     conn = _get_conn()
-    rows = conn.execute("SELECT id, data FROM projects").fetchall()
+    rows = conn.execute("SELECT id, data, updated_at FROM projects").fetchall()
     out: Dict[str, dict] = {}
     for r in rows:
         try:
@@ -65,7 +65,35 @@ def load_all() -> Dict[str, dict]:
         except json.JSONDecodeError:
             continue
         if isinstance(proj, dict) and "id" in proj:
+            proj["_updated_at"] = r["updated_at"] or ""
             out[proj["id"]] = proj
+    return out
+
+
+def list_recent(limit: int = 10) -> list[dict]:
+    """Return the most recently updated projects, summary fields only."""
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT id, name, data, updated_at FROM projects ORDER BY updated_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    out = []
+    for r in rows:
+        try:
+            proj = json.loads(r["data"])
+        except json.JSONDecodeError:
+            proj = {}
+        files = proj.get("files", [])
+        quote = proj.get("saved_quote")
+        sections = quote.get("sections", []) if isinstance(quote, dict) else []
+        out.append({
+            "id": r["id"],
+            "name": r["name"],
+            "updated_at": r["updated_at"] or "",
+            "file_count": len(files),
+            "has_quote": bool(sections),
+            "section_names": [s.get("name", "") for s in sections[:3]],
+        })
     return out
 
 

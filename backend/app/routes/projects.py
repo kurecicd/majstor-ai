@@ -56,6 +56,15 @@ class AnalyzeRequest(BaseModel):
     description: Optional[str] = None
 
 
+class SaveQuoteRequest(BaseModel):
+    quote: dict
+
+
+@router.get("")
+async def list_projects():
+    return storage.list_recent(10)
+
+
 @router.post("")
 async def create_project(body: ProjectCreate):
     pid = str(uuid.uuid4())
@@ -140,6 +149,16 @@ async def upload_project_files(pid: str, files: List[UploadFile] = File(...)):
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
 
 
+@router.post("/{pid}/quote")
+async def save_project_quote(pid: str, body: SaveQuoteRequest):
+    p = _projects.get(pid)
+    if not p:
+        raise HTTPException(404, "Project not found")
+    p["saved_quote"] = body.quote
+    storage.save_one(p)
+    return {"ok": True}
+
+
 @router.delete("/{pid}/files")
 async def delete_project_file(pid: str, name: str):
     """Remove a single file from the project. Pass filename as query param: ?name=photo.jpg"""
@@ -149,6 +168,37 @@ async def delete_project_file(pid: str, name: str):
     p["files"] = [f for f in p["files"] if f["name"] != name]
     storage.save_one(p)
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
+
+
+def _learning_context(current_pid: str) -> str:
+    """Build a short summary of past projects so Claude can calibrate prices,
+    preferred stores, and labor rates for this user."""
+    recent = [
+        p for pid, p in _projects.items()
+        if pid != current_pid and isinstance(p.get("saved_quote"), dict)
+    ]
+    if not recent:
+        return ""
+    recent.sort(key=lambda p: p.get("_updated_at", ""), reverse=True)
+    lines = ["Denna användares senaste projekterfarenhet (kalibrering av priser och butiker):"]
+    for proj in recent[:5]:
+        q = proj["saved_quote"]
+        sections = q.get("sections", [])
+        name = proj.get("name", "Projekt")
+        for s in sections[:2]:
+            for row in s.get("rows", [])[:3]:
+                idx = row.get("selectedStoreIdx", -1)
+                stores = row.get("stores", [])
+                if 0 <= idx < len(stores):
+                    store_name = stores[idx].get("name", "")
+                    price = stores[idx].get("price", 0)
+                    if store_name and price:
+                        lines.append(f"- {name}: {row.get('name','')} → {store_name} {price} kr")
+            for labor in s.get("laborItems", [])[:1]:
+                rate = labor.get("rate", 0)
+                if rate:
+                    lines.append(f"- {name}: timpris {rate} kr/h")
+    return "\n".join(lines) if len(lines) > 1 else ""
 
 
 _BATCH_SIZE = 10  # Claude's practical per-request image limit
@@ -271,6 +321,10 @@ async def analyze_project(pid: str, body: Optional[AnalyzeRequest] = None):
 
     if description:
         content.append({"type": "text", "text": f"Project description from user:\n{description}"})
+
+    learning = _learning_context(pid)
+    if learning:
+        content.append({"type": "text", "text": learning})
 
     content.append({"type": "text", "text": ANALYZE_PROMPT})
 
