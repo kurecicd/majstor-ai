@@ -30,16 +30,18 @@ router = APIRouter()
 _projects: Dict[str, dict] = storage.load_all()
 
 ANALYZE_PROMPT = """Analyze this construction/renovation project based on the description and/or uploaded files provided.
+The description may be in Croatian, Bosnian, English or Swedish — understand all of them.
+ALL output (section names, material names, labor names, units, notes) must be written in SWEDISH.
 
 Even if only a text description is given (no files), generate a full material list and cost estimate.
 
 For EACH area of work you identify:
-1. Name the section clearly (in Swedish)
-2. List all materials with realistic quantities, dimensions/specs, and estimated SEK prices (excl. VAT)
-3. Suggest labor hours for each section
+1. Name the section clearly — in Swedish
+2. List all materials with realistic quantities, dimensions/specs, and estimated SEK prices (excl. VAT) — in Swedish
+3. Suggest labor hours and labor type — in Swedish
 
 Be practical and complete — include all materials needed.
-Always append the complete <<<QUOTE>>> block covering ALL sections and ALL materials, even when working from description only."""
+Always append the complete <<<QUOTE>>> block covering ALL sections and ALL materials."""
 
 
 class ProjectCreate(BaseModel):
