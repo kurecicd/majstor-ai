@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 import uuid
 import base64
@@ -42,6 +42,10 @@ class ProjectCreate(BaseModel):
 
 class RemoveFileBody(BaseModel):
     name: str
+
+
+class AnalyzeRequest(BaseModel):
+    description: Optional[str] = None
 
 
 @router.post("")
@@ -130,12 +134,13 @@ async def delete_project_file(pid: str, name: str):
 
 
 @router.post("/{pid}/analyze")
-async def analyze_project(pid: str):
+async def analyze_project(pid: str, body: Optional[AnalyzeRequest] = None):
     p = _projects.get(pid)
     if not p:
         raise HTTPException(404, "Project not found")
-    if not p["files"]:
-        raise HTTPException(400, "No files uploaded yet")
+    description = ((body.description if body else "") or "").strip()
+    if not p["files"] and not description:
+        raise HTTPException(400, "Add a description or at least one file")
 
     settings = get_settings()
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -149,6 +154,9 @@ async def analyze_project(pid: str):
             })
         elif f["kind"] == "text":
             content.append({"type": "text", "text": f"--- {f['name']} ---\n{f['text']}"})
+
+    if description:
+        content.append({"type": "text", "text": f"Project description from user:\n{description}"})
 
     content.append({"type": "text", "text": ANALYZE_PROMPT})
 
