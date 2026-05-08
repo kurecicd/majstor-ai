@@ -7,7 +7,10 @@ import json
 import re
 
 import httpx
+import anthropic
 from bs4 import BeautifulSoup
+
+from app.config import get_settings
 
 router = APIRouter()
 
@@ -220,11 +223,40 @@ async def _search_store(client: httpx.AsyncClient, store: dict, query: str) -> S
     return base_result
 
 
+def _to_swedish(query: str) -> str:
+    """Translate a material/product query to Swedish so Swedish store searches work.
+
+    Uses claude-haiku for speed and low cost. Falls back to original query on any error.
+    """
+    try:
+        settings = get_settings()
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=30,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Translate this building material or product name to Swedish. "
+                    "Return ONLY the Swedish translation — no explanations, no punctuation. "
+                    "If it is already in Swedish, return it unchanged.\n\n" + query
+                ),
+            }],
+        )
+        result = resp.content[0].text.strip() if resp.content else ""
+        return result or query
+    except Exception:
+        return query
+
+
 @router.post("", response_model=SearchResponse)
 async def search(req: SearchRequest):
     query = req.query.strip()
     if not query:
         return SearchResponse(query=query, results=[])
+
+    # Translate to Swedish so searches on Swedish store sites work
+    query = _to_swedish(query)
 
     async with httpx.AsyncClient(
         timeout=8.0,
