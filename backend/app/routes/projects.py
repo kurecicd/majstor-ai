@@ -101,13 +101,11 @@ async def upload_project_files(pid: str, files: List[UploadFile] = File(...)):
             if ext == "pdf" or ctype == "application/pdf":
                 txt = extract_pdf(data)[:MAX_TEXT_PER_FILE]
                 p["files"].append({"kind": "text", "name": name, "text": txt})
-                # Also render pages as images so Claude vision can read drawings/plans
+                # Render ALL pages as images — PDF pages don't count toward
+                # the user-image cap; the user intentionally put them in the PDF.
                 try:
-                    for img in extract_pdf_pages_as_images(data, max_pages=15):
-                        if image_count >= MAX_IMAGES:
-                            break
+                    for img in extract_pdf_pages_as_images(data, max_pages=999):
                         p["files"].append(img)
-                        image_count += 1
                 except Exception:
                     pass  # fall back to text-only if rendering fails
             elif ext == "docx":
@@ -151,21 +149,91 @@ async def delete_project_file(pid: str, name: str):
     return {"files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]]}
 
 
-def _analyze_stream(client: anthropic.Anthropic, content: list) -> Generator[str, None, None]:
-    """Stream analyze response as SSE chunks so the connection stays alive
-    for long Claude calls (large PDFs can take 60-120s)."""
-    full_text = ""
+_BATCH_SIZE = 10  # Claude's practical per-request image limit
+
+
+def _extract_sections(text: str) -> list:
+    S, E = "<<<QUOTE>>>", "<<<END_QUOTE>>>"
+    si, ei = text.find(S), text.find(E)
+    if si == -1 or ei == -1:
+        return []
     try:
-        with client.messages.stream(
-            model="claude-opus-4-5",
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": content}],
-        ) as stream:
-            for text in stream.text_stream:
-                full_text += text
-                yield f"data: {json_lib.dumps({'type': 'chunk', 'text': text})}\n\n"
-        yield f"data: {json_lib.dumps({'type': 'done', 'message': full_text})}\n\n"
+        data = json_lib.loads(text[si + len(S):ei].strip())
+        return data.get("sections", []) if isinstance(data, dict) else []
+    except Exception:
+        return []
+
+
+def _analyze_stream(client: anthropic.Anthropic, content: list) -> Generator[str, None, None]:
+    """Stream analyze response as SSE.
+
+    When the project has more than _BATCH_SIZE images (e.g. a 25-page PDF),
+    splits into batches of _BATCH_SIZE images and merges the QUOTE sections
+    from each batch into a single final result.
+    """
+    text_items = [c for c in content if c.get("type") == "text"]
+    image_items = [c for c in content if c.get("type") == "image"]
+    prompt_item = text_items[-1]   # ANALYZE_PROMPT always last
+    prefix_items = text_items[:-1] # project text + user description
+
+    batches = (
+        [image_items[i:i + _BATCH_SIZE] for i in range(0, len(image_items), _BATCH_SIZE)]
+        if image_items else [[]]
+    )
+
+    all_sections: list = []
+    first_batch_display = ""
+
+    try:
+        for batch_idx, img_batch in enumerate(batches):
+            batch_content: list = []
+            if batch_idx == 0:
+                batch_content.extend(prefix_items)
+            else:
+                batch_content.append({
+                    "type": "text",
+                    "text": (
+                        f"Batch {batch_idx + 1}/{len(batches)}: additional pages from the same project. "
+                        "Extract any NEW materials or work areas not already listed. "
+                        "Return a <<<QUOTE>>> block with ALL sections found in these pages."
+                    ),
+                })
+                # Keepalive so Railway doesn't cut the idle connection
+                yield ": next-batch\n\n"
+
+            batch_content.extend(img_batch)
+            batch_content.append(prompt_item)
+
+            batch_text = ""
+            with client.messages.stream(
+                model="claude-opus-4-5",
+                max_tokens=2048,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": batch_content}],
+            ) as stream:
+                for token in stream.text_stream:
+                    batch_text += token
+                    if batch_idx == 0:
+                        yield f"data: {json_lib.dumps({'type': 'chunk', 'text': token})}\n\n"
+                    else:
+                        # Keep connection alive with lightweight progress ticks
+                        yield ": t\n\n"
+
+            all_sections.extend(_extract_sections(batch_text))
+
+            if batch_idx == 0:
+                S = "<<<QUOTE>>>"
+                si = batch_text.find(S)
+                first_batch_display = batch_text[:si].strip() if si != -1 else batch_text
+
+        if all_sections:
+            merged = json_lib.dumps({"sections": all_sections}, ensure_ascii=False)
+            final = f"{first_batch_display}\n\n<<<QUOTE>>>\n{merged}\n<<<END_QUOTE>>>"
+        else:
+            final = first_batch_display
+
+        yield f"data: {json_lib.dumps({'type': 'done', 'message': final})}\n\n"
+
     except anthropic.APIError as e:
         yield f"data: {json_lib.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
