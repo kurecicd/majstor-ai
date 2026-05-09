@@ -89,18 +89,18 @@ async def search(req: SearchRequest):
                 "role": "user",
                 "content": (
                     f"Du är expert på svenska byggvaruhandeln.\n\n"
-                    f"Produkt: \"{query}\"\n\n"
-                    f"Hitta NÄRMAST LIKNANDE produkt hos: {store_list}.\n"
-                    "Ge produktnamnet SÅ SOM DET KALLAS i respektive butik.\n\n"
-                    "Returnera ENBART detta JSON-format:\n"
+                    f"En hantverkare söker: \"{query}\"\n\n"
+                    f"För varje butik nedan, ge:\n"
+                    "1. 'name' = exakt produktnamn som det VERKLIGEN HETER i butikens katalog "
+                    "(t.ex. 'Granbräda 28×120 mm 3,6 m tryckimpregnerad klass 3') — INTE butikens namn eller domän\n"
+                    "2. 'price' = rimlig prisupp skattning SEK exkl. moms\n"
+                    "3. 'search_query' = 2-5 ord att skriva i butikens sökruta för att hitta produkten\n\n"
+                    "Returnera ENBART detta JSON:\n"
                     + json_lib.dumps(
-                        [{"store": s["name"], "name": "...", "price": 0, "unit": "st", "search_query": "..."} for s in missing],
+                        [{"store": s["name"], "name": "exakt produktnamn", "price": 0, "unit": "st", "search_query": "sökord"} for s in missing],
                         ensure_ascii=False
                     )
-                    + "\n\nRegler:\n"
-                    "- price = uppskattning SEK exkl. moms (aldrig 0 om butiken har produkten)\n"
-                    "- search_query = bästa sökord för butikens sökruta (2-4 ord)\n"
-                    "- Alla texter på svenska"
+                    + "\n\nViktigt: 'name' ska vara det RIKTIGA produktnamnet, aldrig butikens webbadress eller 'standardsortiment'."
                 ),
             }],
         )
