@@ -461,12 +461,12 @@ function StoreCard({
   const hasPrice = option.price > 0;
   return (
     <div
-      className={`rounded-lg border p-3 transition-colors ${
-        selected ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"
+      className={`rounded-lg border transition-colors ${
+        selected ? "border-green-500 bg-green-50" : "border-gray-200"
       }`}
     >
-      {/* Top row: radio + store name + price + Välj */}
-      <div className="flex items-center gap-2">
+      {/* Main row */}
+      <div className="flex items-center gap-2 p-2.5">
         <div
           className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
             selected ? "border-green-600 bg-green-600" : "border-gray-300"
@@ -474,12 +474,19 @@ function StoreCard({
         >
           {selected && <Check size={12} className="text-white" />}
         </div>
-        <span className="font-bold text-gray-900 flex-1">{option.name}</span>
-        {hasPrice && (
-          <span className="font-bold text-gray-900 shrink-0 text-base">
-            {fmt(option.price)} kr
-          </span>
-        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-gray-900">{option.name}</span>
+            {hasPrice && (
+              <span className="font-bold text-gray-900 shrink-0">{fmt(option.price)} kr</span>
+            )}
+          </div>
+          {option.source && option.source !== option.name && (
+            <span className="text-xs text-gray-500 truncate block">{option.source}</span>
+          )}
+        </div>
+
         <button
           onClick={onPick}
           disabled={selected}
@@ -491,27 +498,19 @@ function StoreCard({
         </button>
       </div>
 
-      {/* Product name from Claude + link */}
-      <div className="mt-1.5 ml-7 flex items-center gap-2 flex-wrap">
-        {option.source && option.source !== option.name && (
-          <span className="text-sm text-gray-600 truncate">{option.source}</span>
-        )}
-        {hasPrice && (
-          <span className="text-[10px] text-gray-400">AI-uppskattning</span>
-        )}
-        {option.url && (
-          <a
-            href={option.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded"
-          >
-            <ExternalLink size={11} />
-            {hasPrice ? "Verifiera i butik" : "Sök i butiken"}
-          </a>
-        )}
-      </div>
+      {/* Verify link — always full-width, easy to click */}
+      {option.url && (
+        <a
+          href={option.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center justify-center gap-1.5 w-full py-2 border-t border-gray-100 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors rounded-b-lg"
+        >
+          <ExternalLink size={12} />
+          {hasPrice ? `Öppna i ${option.name} och verifiera →` : `Sök i ${option.name} →`}
+        </a>
+      )}
     </div>
   );
 }
