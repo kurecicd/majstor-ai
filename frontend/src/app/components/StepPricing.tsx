@@ -49,6 +49,10 @@ export default function StepPricing({
 }) {
   const [searchingAll, setSearchingAll] = useState(false);
   const autoSearched = useRef(false);
+  // Always read the latest quote — avoids stale-closure bug when many
+  // parallel searches complete and each overwrites the others' results.
+  const quoteRef = useRef(quote);
+  quoteRef.current = quote;
 
   function saveToLibrary(query: string, store: string, name: string, price: number, url: string) {
     fetch(`${backend}/api/library`, {
@@ -78,7 +82,9 @@ export default function StepPricing({
   }, []);
 
   const updateRow = (sIdx: number, rIdx: number, r: QuoteRow) => {
-    const sections = [...quote.sections];
+    // Read from ref — always the latest state, safe to call from async callbacks
+    const current = quoteRef.current;
+    const sections = [...current.sections];
     const section = { ...sections[sIdx] };
     const rows = [...section.rows];
     rows[rIdx] = r;
@@ -88,8 +94,8 @@ export default function StepPricing({
   };
 
   async function searchRow(sIdx: number, rIdx: number) {
-    const row = quote.sections[sIdx].rows[rIdx];
-    if (!row.name.trim()) return;
+    const row = quoteRef.current.sections[sIdx]?.rows[rIdx];
+    if (!row?.name.trim()) return;
     try {
       const res = await fetch(`${backend}/api/search`, {
         method: "POST",
@@ -99,13 +105,13 @@ export default function StepPricing({
       const data = (await res.json()) as SearchResponse;
       mergeHits(sIdx, rIdx, data.results);
     } catch {
-      // Mark searched even on failure so user sees "no results"
-      updateRow(sIdx, rIdx, { ...row, searched: true });
+      const current = quoteRef.current.sections[sIdx]?.rows[rIdx];
+      if (current) updateRow(sIdx, rIdx, { ...current, searched: true });
     }
   }
 
   function mergeHits(sIdx: number, rIdx: number, hits: SearchHit[]) {
-    const row = quote.sections[sIdx].rows[rIdx];
+    const row = quoteRef.current.sections[sIdx].rows[rIdx];
     const newStores: StoreOption[] = [...row.stores];
     for (const h of hits) {
       const existingIdx = newStores.findIndex(
