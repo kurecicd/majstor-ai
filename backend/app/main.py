@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app import storage
-from app.routes import chat, pdf, extract, projects, scrape, search
+from app.routes import chat, pdf, extract, projects, scrape, search, library
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("majstor")
@@ -37,6 +37,7 @@ app.include_router(extract.router, prefix="/api/extract", tags=["extract"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(scrape.router, prefix="/api/scrape", tags=["scrape"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(library.router, prefix="/api/library", tags=["library"])
 
 
 @app.get("/health")

@@ -50,6 +50,14 @@ export default function StepPricing({
   const [searchingAll, setSearchingAll] = useState(false);
   const autoSearched = useRef(false);
 
+  function saveToLibrary(query: string, store: string, name: string, price: number, url: string) {
+    fetch(`${backend}/api/library`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, store, name, price, url }),
+    }).catch(() => {});
+  }
+
   // Auto-search all unsearched rows when entering Step 3
   useEffect(() => {
     if (autoSearched.current) return;
@@ -164,6 +172,9 @@ export default function StepPricing({
                 selectedStoreIdx: storeIdx,
                 manualPrice: store?.price ?? row.manualPrice,
               });
+              if (store && store.price > 0) {
+                saveToLibrary(row.name, store.name, store.source || store.name, store.price, store.url || "");
+              }
             }}
             onSetManual={(ri, price) => {
               const row = s.rows[ri];

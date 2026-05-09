@@ -40,6 +40,20 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_updated ON projects(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS product_picks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query TEXT NOT NULL,
+    store TEXT NOT NULL,
+    name TEXT NOT NULL,
+    price REAL NOT NULL DEFAULT 0,
+    url TEXT NOT NULL DEFAULT '',
+    pick_count INTEGER NOT NULL DEFAULT 1,
+    last_used TEXT DEFAULT (datetime('now')),
+    UNIQUE(query, store)
+);
+
+CREATE INDEX IF NOT EXISTS idx_picks_query ON product_picks(query);
 """
 
 
@@ -118,6 +132,38 @@ def delete_one(pid: str) -> None:
     conn = _get_conn()
     conn.execute("DELETE FROM projects WHERE id = ?", (pid,))
     conn.commit()
+
+
+def save_pick(query: str, store: str, name: str, price: float, url: str = "") -> None:
+    """Record that the user picked a specific product for a query. Increments count on repeat."""
+    conn = _get_conn()
+    conn.execute(
+        """INSERT INTO product_picks (query, store, name, price, url)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(query, store) DO UPDATE SET
+               name = excluded.name,
+               price = excluded.price,
+               url = excluded.url,
+               pick_count = pick_count + 1,
+               last_used = datetime('now')""",
+        (query.lower().strip(), store, name, round(price, 2), url or ""),
+    )
+    conn.commit()
+
+
+def find_picks(query: str, limit: int = 5) -> list[dict]:
+    """Return library entries matching the query by substring, ranked by pick_count."""
+    conn = _get_conn()
+    q = f"%{query.lower().strip()}%"
+    rows = conn.execute(
+        """SELECT query, store, name, price, url, pick_count
+           FROM product_picks
+           WHERE LOWER(query) LIKE ? OR LOWER(name) LIKE ?
+           ORDER BY pick_count DESC, last_used DESC
+           LIMIT ?""",
+        (q, q, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def storage_path() -> str:
