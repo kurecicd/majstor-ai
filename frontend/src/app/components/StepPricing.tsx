@@ -154,6 +154,7 @@ export default function StepPricing({
           <PricingSection
             key={s.id}
             section={s}
+            backend={backend}
             onSearchRow={(ri) => searchRow(si, ri)}
             onPickStore={(ri, storeIdx) => {
               const row = s.rows[ri];
@@ -166,21 +167,18 @@ export default function StepPricing({
             }}
             onSetManual={(ri, price) => {
               const row = s.rows[ri];
-              updateRow(si, ri, {
-                ...row,
-                selectedStoreIdx: -1,
-                manualPrice: price,
-              });
+              updateRow(si, ri, { ...row, selectedStoreIdx: -1, manualPrice: price });
             }}
             onAddManualLink={(ri, opt) => {
               const row = s.rows[ri];
               const stores = [...row.stores, opt];
-              updateRow(si, ri, {
-                ...row,
-                stores,
-                selectedStoreIdx: stores.length - 1,
-                manualPrice: opt.price,
-              });
+              updateRow(si, ri, { ...row, stores, selectedStoreIdx: stores.length - 1, manualPrice: opt.price });
+            }}
+            onReplaceStore={(ri, storeIdx, opt) => {
+              const row = s.rows[ri];
+              const stores = [...row.stores];
+              stores[storeIdx] = opt;
+              updateRow(si, ri, { ...row, stores, selectedStoreIdx: storeIdx, manualPrice: opt.price || row.manualPrice });
             }}
           />
         ))}
@@ -209,16 +207,20 @@ export default function StepPricing({
 
 function PricingSection({
   section,
+  backend,
   onSearchRow,
   onPickStore,
   onSetManual,
   onAddManualLink,
+  onReplaceStore,
 }: {
   section: QuoteSection;
+  backend: string;
   onSearchRow: (rowIdx: number) => Promise<void>;
   onPickStore: (rowIdx: number, storeIdx: number) => void;
   onSetManual: (rowIdx: number, price: number) => void;
   onAddManualLink: (rowIdx: number, opt: StoreOption) => void;
+  onReplaceStore: (rowIdx: number, storeIdx: number, opt: StoreOption) => void;
 }) {
   if (section.rows.length === 0) return null;
   return (
@@ -231,10 +233,12 @@ function PricingSection({
           <PricingRow
             key={r.id}
             row={r}
+            backend={backend}
             onSearch={() => onSearchRow(ri)}
             onPick={(idx) => onPickStore(ri, idx)}
             onSetManual={(p) => onSetManual(ri, p)}
             onAddManualLink={(opt) => onAddManualLink(ri, opt)}
+            onReplaceStore={(idx, opt) => onReplaceStore(ri, idx, opt)}
           />
         ))}
       </div>
@@ -246,16 +250,20 @@ function PricingSection({
 
 function PricingRow({
   row,
+  backend,
   onSearch,
   onPick,
   onSetManual,
   onAddManualLink,
+  onReplaceStore,
 }: {
   row: QuoteRow;
+  backend: string;
   onSearch: () => Promise<void>;
   onPick: (storeIdx: number) => void;
   onSetManual: (price: number) => void;
   onAddManualLink: (opt: StoreOption) => void;
+  onReplaceStore: (storeIdx: number, opt: StoreOption) => void;
 }) {
   const [searching, setSearching] = useState(false);
   const [showManual, setShowManual] = useState(false);
@@ -320,7 +328,9 @@ function PricingRow({
               key={i}
               option={s}
               selected={row.selectedStoreIdx === i}
+              backend={backend}
               onPick={() => onPick(i)}
+              onReplace={(opt) => onReplaceStore(i, opt)}
             />
           ))}
         </div>
@@ -436,19 +446,50 @@ function PricingRow({
 function StoreCard({
   option,
   selected,
+  backend,
   onPick,
+  onReplace,
 }: {
   option: StoreOption;
   selected: boolean;
+  backend: string;
   onPick: () => void;
+  onReplace: (opt: StoreOption) => void;
 }) {
   const hasPrice = option.price > 0;
+  const [customUrl, setCustomUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+
+  async function applyUrl(url: string) {
+    if (!url.trim()) return;
+    setFetching(true);
+    try {
+      const res = await fetch(`${backend}/api/scrape`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const data = await res.json();
+      onReplace({
+        name: option.name,
+        price: data.price || option.price || 0,
+        url: url.trim(),
+        source: data.name || url.trim(),
+      });
+      setCustomUrl("");
+      onPick();
+    } catch {
+      // If scrape fails, just update the URL manually
+      onReplace({ ...option, url: url.trim(), source: url.trim() });
+      setCustomUrl("");
+      onPick();
+    } finally {
+      setFetching(false);
+    }
+  }
+
   return (
-    <div
-      className={`rounded-lg border transition-colors ${
-        selected ? "border-green-500 bg-green-50" : "border-gray-200"
-      }`}
-    >
+    <div className={`rounded-lg border transition-colors ${selected ? "border-green-500 bg-green-50" : "border-gray-200"}`}>
       {/* Main row */}
       <div className="flex items-center gap-2 p-2.5">
         <div
@@ -460,15 +501,27 @@ function StoreCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-gray-900">{option.name}</span>
             {hasPrice && (
               <span className="font-bold text-gray-900 shrink-0">{fmt(option.price)} kr</span>
             )}
           </div>
-          {option.source && option.source !== option.name && (
-            <span className="text-xs text-gray-500 truncate block">{option.source}</span>
-          )}
+          {/* Product name as clickable link */}
+          {option.source && option.url ? (
+            <a
+              href={option.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5 mt-0.5"
+            >
+              <ExternalLink size={10} />
+              {option.source !== option.name ? option.source : "Öppna i butiken"}
+            </a>
+          ) : option.source && option.source !== option.name ? (
+            <span className="text-xs text-gray-500 block mt-0.5">{option.source}</span>
+          ) : null}
         </div>
 
         <button
@@ -482,19 +535,26 @@ function StoreCard({
         </button>
       </div>
 
-      {/* Verify link — always full-width, easy to click */}
-      {option.url && (
-        <a
-          href={option.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center justify-center gap-1.5 w-full py-2 border-t border-gray-100 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors rounded-b-lg"
-        >
-          <ExternalLink size={12} />
-          {hasPrice ? `Öppna i ${option.name} och verifiera →` : `Sök i ${option.name} →`}
-        </a>
-      )}
+      {/* URL paste — replace with a different product */}
+      <div className="px-2.5 pb-2.5 flex items-center gap-1.5">
+        <input
+          type="url"
+          value={customUrl}
+          onChange={(e) => setCustomUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && applyUrl(customUrl)}
+          placeholder="Klistra in rätt produkt-URL och tryck Enter…"
+          className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+        />
+        {customUrl && (
+          <button
+            onClick={() => applyUrl(customUrl)}
+            disabled={fetching}
+            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded shrink-0"
+          >
+            {fetching ? <Loader2 size={11} className="animate-spin" /> : "OK"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
