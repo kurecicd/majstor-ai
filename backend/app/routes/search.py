@@ -70,27 +70,25 @@ async def search(req: SearchRequest):
     settings = get_settings()
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    prompt = f"""Du är expert på svenska byggvaruhandeln. En hantverkare söker:
-"{query}"
+    prompt = f"""Du är expert på svenska byggvaruhandeln.
 
-Hitta denna produkt (eller närmaste likvärdiga alternativ) hos:
-- Bauhaus Sverige
-- Hornbach Sverige
-- Byggmax Sverige
+En hantverkare söker: "{query}"
 
-Returnera EXAKT detta JSON-format, inget annat:
+Hitta NÄRMAST LIKNANDE produkt hos Bauhaus Sverige, Hornbach Sverige och Byggmax Sverige.
+Ge produktnamnet SÅ SOM DET KALLAS i respektive butik, plus bästa sökordet att skriva i butikens sökruta.
+
+Returnera ENBART detta JSON-format, inget annat:
 [
-  {{"store":"Bauhaus","name":"exakt produktnamn på svenska","price":0,"unit":"st","url":"https://...","note":""}},
-  {{"store":"Hornbach","name":"...","price":0,"unit":"st","url":"https://...","note":""}},
-  {{"store":"Byggmax","name":"...","price":0,"unit":"st","url":"https://...","note":""}}
+  {{"store":"Bauhaus","name":"produktnamn som Bauhaus kallar det","price":0,"unit":"st","search_query":"bästa sökterm för Bauhaus","note":""}},
+  {{"store":"Hornbach","name":"produktnamn som Hornbach kallar det","price":0,"unit":"st","search_query":"bästa sökterm för Hornbach","note":""}},
+  {{"store":"Byggmax","name":"produktnamn som Byggmax kallar det","price":0,"unit":"st","search_query":"bästa sökterm för Byggmax","note":""}}
 ]
 
 Regler:
-- Pris i SEK exkl. moms per enhet
-- Rätt enhet: st, m, m², L, kg, förp, rulle, säck etc.
-- Om exakt produkt inte finns: hitta närmaste alternativ och förklara i "note"
-- url: direktlänk till produkt om du vet den, annars butikens sök-URL
-- Om butiken inte har något lämpligt: price=0 och förklara i note
+- price = rimlig uppskattning i SEK exkl. moms per enhet (aldrig 0 om butiken troligtvis har produkten)
+- unit = rätt enhet: st, m, m², L, kg, förp, rulle, säck etc.
+- search_query = de bästa sökorden för att hitta produkten i den specifika butikens sökruta (2-4 ord)
+- Om butiken sannolikt INTE har produkten: price=0, förklara i note
 - Alla texter på svenska"""
 
     try:
@@ -100,7 +98,6 @@ Regler:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = (resp.content[0].text if resp.content else "").strip()
-        # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -109,9 +106,10 @@ Regler:
         results: List[StoreResult] = []
         for item in items:
             store = item.get("store", "")
-            su = _search_url(store, query)
+            # Use the optimised search_query to build the URL — always a working search link
+            sq = item.get("search_query") or item.get("name") or query
+            su = _search_url(store, sq)
             price = item.get("price")
-            url = item.get("url") or su
             note = item.get("note") or None
             results.append(
                 StoreResult(
@@ -119,14 +117,13 @@ Regler:
                     search_url=su,
                     name=item.get("name") or None,
                     price=float(price) if price else None,
-                    url=url,
+                    url=su,  # search URL is always valid; user can replace with exact product URL
                     error=note if not price else None,
                 )
             )
         return SearchResponse(query=query, results=results)
 
     except Exception:
-        # Fallback: return search links so the user can look manually
         return SearchResponse(
             query=query,
             results=[

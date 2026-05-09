@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Loader2,
   ExternalLink,
@@ -48,6 +48,18 @@ export default function StepPricing({
   onContinue: () => void;
 }) {
   const [searchingAll, setSearchingAll] = useState(false);
+  const autoSearched = useRef(false);
+
+  // Auto-search all unsearched rows when entering Step 3
+  useEffect(() => {
+    if (autoSearched.current) return;
+    autoSearched.current = true;
+    const hasUnsearched = quote.sections.some((s) =>
+      s.rows.some((r) => !r.searched && r.name.trim())
+    );
+    if (hasUnsearched) searchAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateRow = (sIdx: number, rIdx: number, r: QuoteRow) => {
     const sections = [...quote.sections];
@@ -449,34 +461,43 @@ function StoreCard({
   const hasPrice = option.price > 0;
   return (
     <div
-      className={`flex items-center gap-3 rounded-lg border p-2.5 transition-colors ${
-        selected
-          ? "border-green-500 bg-green-50"
-          : "border-gray-200 hover:border-gray-400"
+      className={`rounded-lg border p-3 transition-colors ${
+        selected ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"
       }`}
     >
-      <div
-        className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
-          selected ? "border-green-600 bg-green-600" : "border-gray-300"
-        }`}
-      >
-        {selected && <Check size={12} className="text-white" />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-gray-900 truncate">
-            {option.name}
-          </span>
-          {hasPrice ? (
-            <span className="font-bold text-gray-900 shrink-0">
-              {fmt(option.price)} kr
-            </span>
-          ) : (
-            <span className="text-xs text-gray-400 shrink-0">–</span>
-          )}
+      {/* Top row: radio + store name + price + Välj */}
+      <div className="flex items-center gap-2">
+        <div
+          className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+            selected ? "border-green-600 bg-green-600" : "border-gray-300"
+          }`}
+        >
+          {selected && <Check size={12} className="text-white" />}
         </div>
+        <span className="font-bold text-gray-900 flex-1">{option.name}</span>
         {hasPrice && (
-          <div className="text-[10px] text-gray-400 mt-0.5">AI-uppskattning</div>
+          <span className="font-bold text-gray-900 shrink-0 text-base">
+            {fmt(option.price)} kr
+          </span>
+        )}
+        <button
+          onClick={onPick}
+          disabled={selected}
+          className={`text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 ${
+            selected ? "bg-green-600 text-white" : "bg-gray-900 text-white hover:bg-gray-700"
+          }`}
+        >
+          {selected ? "Vald" : "Välj"}
+        </button>
+      </div>
+
+      {/* Product name from Claude + link */}
+      <div className="mt-1.5 ml-7 flex items-center gap-2 flex-wrap">
+        {option.source && option.source !== option.name && (
+          <span className="text-sm text-gray-600 truncate">{option.source}</span>
+        )}
+        {hasPrice && (
+          <span className="text-[10px] text-gray-400">AI-uppskattning</span>
         )}
         {option.url && (
           <a
@@ -484,24 +505,13 @@ function StoreCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded"
           >
-            <ExternalLink size={10} />
+            <ExternalLink size={11} />
             {hasPrice ? "Verifiera i butik" : "Sök i butiken"}
           </a>
         )}
       </div>
-      <button
-        onClick={onPick}
-        disabled={selected}
-        className={`text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors ${
-          selected
-            ? "bg-green-600 text-white"
-            : "bg-gray-900 text-white hover:bg-gray-700"
-        }`}
-      >
-        {selected ? "Vald" : "Välj"}
-      </button>
     </div>
   );
 }
