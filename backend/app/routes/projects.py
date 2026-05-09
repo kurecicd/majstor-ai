@@ -83,6 +83,7 @@ async def get_project(pid: str):
         "id": p["id"],
         "name": p["name"],
         "files": [{"name": f["name"], "kind": f["kind"]} for f in p["files"]],
+        "saved_quote": p.get("saved_quote"),
     }
 
 

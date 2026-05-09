@@ -331,6 +331,7 @@ export default function Home() {
             onChange={(q) => { setQuote(q); saveQuoteToBackend(q); }}
             onBack={() => goTo(1)}
             onContinue={() => goTo(3)}
+            onSave={async () => { if (quote) await saveQuoteToBackend(quote); }}
           />
         )}
         {step === 2 && !quote && <NoQuoteFallback onBack={() => goTo(1)} />}
