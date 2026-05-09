@@ -1,8 +1,4 @@
-"""Store price search using Claude with web_search tool.
-
-Claude searches the actual store websites to find real product pages,
-prices and URLs — not guesses or hallucinated links.
-"""
+"""Store price search — library-first, then Claude haiku for missing stores."""
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -19,9 +15,9 @@ from app import storage
 router = APIRouter()
 
 STORES = [
-    {"name": "Bauhaus",  "domain": "bauhaus.se",  "search_template": "https://www.bauhaus.se/catalogsearch/result/?q={q}"},
-    {"name": "Byggmax",  "domain": "byggmax.se",  "search_template": "https://www.byggmax.se/catalogsearch/result/?q={q}"},
-    {"name": "Hornbach", "domain": "hornbach.se",  "search_template": "https://www.hornbach.se/sortiment/sok/?term={q}"},
+    {"name": "Bauhaus",  "search_template": "https://www.bauhaus.se/catalogsearch/result/?q={q}"},
+    {"name": "Byggmax",  "search_template": "https://www.byggmax.se/catalogsearch/result/?q={q}"},
+    {"name": "Hornbach", "search_template": "https://www.hornbach.se/sortiment/sok/?term={q}"},
 ]
 
 
@@ -45,22 +41,11 @@ class SearchResponse(BaseModel):
     results: List[StoreResult]
 
 
-def _fallback_url(store_name: str, query: str) -> str:
+def _search_url(store_name: str, query: str) -> str:
     for s in STORES:
         if s["name"].lower() == store_name.lower():
             return s["search_template"].format(q=quote_plus(query))
     return f"https://www.google.se/search?q={quote_plus(query + ' ' + store_name)}"
-
-
-def _parse_price(s: str) -> Optional[float]:
-    m = re.search(r"[\d\s.,]+", str(s).replace("\xa0", ""))
-    if not m:
-        return None
-    raw = m.group(0).strip().replace(" ", "").replace(",", ".")
-    try:
-        return float(raw)
-    except ValueError:
-        return None
 
 
 @router.post("", response_model=SearchResponse)
@@ -69,106 +54,88 @@ async def search(req: SearchRequest):
     if not query:
         return SearchResponse(query=query, results=[])
 
-    settings = get_settings()
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    fallback_urls = {s["name"]: _search_url(s["name"], query) for s in STORES}
 
-    fallback_urls = {s["name"]: _fallback_url(s["name"], query) for s in STORES}
-
-    # ── Library first ───────────────────────────────────────────────────────
-    # Check if user has picked this product before — return library hits as
-    # top results so they don't have to search again.
+    # ── 1. Library first ─────────────────────────────────────────────────────
     library_hits = storage.find_picks(query, limit=3)
-    if library_hits:
-        results = [
-            StoreResult(
-                store=h["store"],
-                search_url=fallback_urls.get(h["store"], h["url"]),
-                name=f"⭐ {h['name']}",  # star prefix = library result
-                price=h["price"],
-                url=h["url"] or fallback_urls.get(h["store"], ""),
-                error=None,
-                image=None,
-            )
-            for h in library_hits
-        ]
-        # Fill in missing stores with normal search only if we have fewer than 3 library hits
-        covered = {h["store"] for h in library_hits}
-        if len(covered) < len(STORES):
-            pass  # run Claude below and merge missing stores
-        else:
-            return SearchResponse(query=query, results=results)
-    else:
-        results = []
+    results: List[StoreResult] = [
+        StoreResult(
+            store=h["store"],
+            search_url=fallback_urls.get(h["store"], h["url"]),
+            name=f"⭐ {h['name']}",
+            price=h["price"],
+            url=h["url"] or fallback_urls.get(h["store"], ""),
+        )
+        for h in library_hits
+    ]
+    covered = {h["store"] for h in library_hits}
+
+    # If library already has all stores, return immediately
+    if covered >= {s["name"] for s in STORES}:
+        return SearchResponse(query=query, results=results)
+
+    # ── 2. Claude haiku for missing stores ───────────────────────────────────
+    missing = [s for s in STORES if s["name"] not in covered]
+    store_list = ", ".join(s["name"] + " Sverige" for s in missing)
 
     try:
+        settings = get_settings()
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
         resp = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=2000,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Sök efter produkten \"{query}\" på dessa svenska byggvarubutiker: "
-                    "bauhaus.se, byggmax.se, hornbach.se.\n\n"
-                    "För varje butik, hitta den bäst matchande produkten och returnera:\n"
-                    "- Exakt produktnamn på svenska\n"
-                    "- Pris i SEK exkl. moms\n"
-                    "- Direktlänk till produktsidan\n\n"
-                    "Returnera ENBART detta JSON-format efter dina sökningar, inget annat:\n"
-                    "[\n"
-                    "  {\"store\":\"Bauhaus\",\"name\":\"...\",\"price\":0,\"unit\":\"st\",\"url\":\"https://...\"},\n"
-                    "  {\"store\":\"Byggmax\",\"name\":\"...\",\"price\":0,\"unit\":\"st\",\"url\":\"https://...\"},\n"
-                    "  {\"store\":\"Hornbach\",\"name\":\"...\",\"price\":0,\"unit\":\"st\",\"url\":\"https://...\"}\n"
-                    "]\n\n"
-                    "Om produkten inte finns i en butik, sätt price=0 och url till butikens sök-URL."
+                    f"Du är expert på svenska byggvaruhandeln.\n\n"
+                    f"Produkt: \"{query}\"\n\n"
+                    f"Hitta NÄRMAST LIKNANDE produkt hos: {store_list}.\n"
+                    "Ge produktnamnet SÅ SOM DET KALLAS i respektive butik.\n\n"
+                    "Returnera ENBART detta JSON-format:\n"
+                    + json_lib.dumps(
+                        [{"store": s["name"], "name": "...", "price": 0, "unit": "st", "search_query": "..."} for s in missing],
+                        ensure_ascii=False
+                    )
+                    + "\n\nRegler:\n"
+                    "- price = uppskattning SEK exkl. moms (aldrig 0 om butiken har produkten)\n"
+                    "- search_query = bästa sökord för butikens sökruta (2-4 ord)\n"
+                    "- Alla texter på svenska"
                 ),
             }],
         )
 
-        # Extract the final text block from the response (after tool use)
-        raw = ""
-        for block in resp.content:
-            if getattr(block, "type", None) == "text":
-                raw = block.text.strip()
-
-        # Strip markdown fences if present
+        raw = (resp.content[0].text if resp.content else "").strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        raw = raw.strip()
+        m = re.search(r"\[.*\]", raw.strip(), re.DOTALL)
+        items = json_lib.loads(m.group(0) if m else raw)
 
-        # Find JSON array in the text
-        m = re.search(r"\[.*\]", raw, re.DOTALL)
-        if m:
-            raw = m.group(0)
-
-        items = json_lib.loads(raw)
-        covered = {h["store"] for h in library_hits}
         for item in items:
             store = item.get("store", "")
             if store in covered:
-                continue  # library result already covers this store
+                continue
+            sq = item.get("search_query") or item.get("name") or query
+            su = _search_url(store, sq)
             price = item.get("price")
-            url = item.get("url") or fallback_urls.get(store, "")
             results.append(StoreResult(
                 store=store,
-                search_url=fallback_urls.get(store, url),
+                search_url=su,
                 name=item.get("name") or None,
                 price=float(price) if price else None,
-                url=url,
+                url=su,
             ))
-        return SearchResponse(query=query, results=results)
 
     except Exception:
-        # Fallback: library results + search links for uncovered stores
-        covered = {h["store"] for h in library_hits}
-        for s in STORES:
+        for s in missing:
             if s["name"] not in covered:
                 results.append(StoreResult(
                     store=s["name"],
                     search_url=fallback_urls[s["name"]],
                     url=fallback_urls[s["name"]],
-                        error="Klicka för att söka manuellt",
+                    error="Klicka för att söka manuellt",
                 ))
-        return SearchResponse(query=query, results=results)
+
+    return SearchResponse(query=query, results=results)
