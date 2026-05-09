@@ -58,14 +58,22 @@ export default function StepPricing({
     }).catch(() => {});
   }
 
-  // Auto-search all unsearched rows when entering Step 3
+  // Always re-search all rows when entering Step 3 — ensures fresh results
+  // even for rows that were searched in a previous session
   useEffect(() => {
     if (autoSearched.current) return;
     autoSearched.current = true;
-    const hasUnsearched = quote.sections.some((s) =>
-      s.rows.some((r) => !r.searched && r.name.trim())
-    );
-    if (hasUnsearched) searchAll();
+    const hasMaterial = quote.sections.some((s) => s.rows.some((r) => r.name.trim()));
+    if (hasMaterial) {
+      setSearchingAll(true);
+      const tasks: Promise<unknown>[] = [];
+      quote.sections.forEach((s, si) => {
+        s.rows.forEach((r, ri) => {
+          if (r.name.trim()) tasks.push(searchRow(si, ri));
+        });
+      });
+      Promise.all(tasks).finally(() => setSearchingAll(false));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,7 +108,6 @@ export default function StepPricing({
     const row = quote.sections[sIdx].rows[rIdx];
     const newStores: StoreOption[] = [...row.stores];
     for (const h of hits) {
-      // Replace any existing entry from the same store name with the live hit.
       const existingIdx = newStores.findIndex(
         (s) => s.name.toLowerCase() === h.store.toLowerCase()
       );
@@ -114,7 +121,26 @@ export default function StepPricing({
       if (existingIdx >= 0) newStores[existingIdx] = opt;
       else newStores.push(opt);
     }
-    updateRow(sIdx, rIdx, { ...row, stores: newStores, searched: true });
+
+    // Auto-select cheapest store — user can override by clicking Välj on another
+    let selectedIdx = row.selectedStoreIdx;
+    if (selectedIdx < 0 || selectedIdx >= newStores.length) {
+      // No selection yet — pick cheapest with a price
+      let bestIdx = -1;
+      let bestPrice = Infinity;
+      newStores.forEach((s, i) => {
+        if (s.price > 0 && s.price < bestPrice) { bestPrice = s.price; bestIdx = i; }
+      });
+      selectedIdx = bestIdx;
+    }
+
+    updateRow(sIdx, rIdx, {
+      ...row,
+      stores: newStores,
+      searched: true,
+      selectedStoreIdx: selectedIdx,
+      manualPrice: selectedIdx >= 0 ? (newStores[selectedIdx]?.price ?? row.manualPrice) : row.manualPrice,
+    });
   }
 
   async function searchAll() {
@@ -550,7 +576,15 @@ function StoreCard({
           value={customUrl}
           onChange={(e) => setCustomUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && applyUrl(customUrl)}
-          placeholder="Klistra in rätt produkt-URL och tryck Enter…"
+          onPaste={(e) => {
+            const url = e.clipboardData.getData("text").trim();
+            if (url.startsWith("http")) {
+              e.preventDefault();
+              setCustomUrl(url);
+              applyUrl(url);
+            }
+          }}
+          placeholder="Klistra in rätt produkt-URL…"
           className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
         />
         {customUrl && (
