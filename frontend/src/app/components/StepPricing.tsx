@@ -518,17 +518,19 @@ function StoreCard({
               <span className="font-bold text-gray-900 shrink-0">{fmt(option.price)} kr</span>
             )}
           </div>
-          {/* Product name as clickable link */}
-          {option.source && option.url ? (
+          {/* Always show a link to the product/search — never hidden */}
+          {option.url ? (
             <a
               href={option.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-xs text-blue-600 hover:underline flex items-center gap-0.5 mt-0.5"
+              className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5 mt-0.5 font-medium"
             >
-              <ExternalLink size={10} />
-              {option.source !== option.name ? option.source : "Öppna i butiken"}
+              <ExternalLink size={11} />
+              {option.source && option.source !== option.name
+                ? option.source
+                : `Öppna i ${option.name}`}
             </a>
           ) : option.source && option.source !== option.name ? (
             <span className="text-xs text-gray-500 block mt-0.5">{option.source}</span>
