@@ -131,7 +131,7 @@ export default function StepPricing({
             Steg 3 — Pris och butik
           </h2>
           <p className="text-sm text-gray-500">
-            Hämta priser från Bauhaus, Byggmax och Hornbach. Välj butik per vara.
+            Priser hämtas automatiskt. Klicka på butikslänken för att verifiera produkten, välj sedan.
           </p>
         </div>
         <button
@@ -289,41 +289,25 @@ function PricingRow({
             {row.qty} {row.unit}
             {sel && (
               <>
-                {" "}
-                · vald: <span className="text-green-700 font-semibold">
-                  {sel.name}
-                </span>{" "}
+                {" · "}
+                <span className="text-green-700 font-semibold">{sel.name}</span>{" "}
                 <span className="font-semibold">{fmt(sel.price)} kr</span>
               </>
             )}
           </div>
         </div>
-        {!row.searched && (
+        {/* While searching: spinner. After searched: small refresh icon. Never a big blue button. */}
+        {searching ? (
+          <Loader2 size={15} className="animate-spin text-blue-500 shrink-0" />
+        ) : !row.searched ? (
+          <Loader2 size={15} className="animate-spin text-gray-300 shrink-0" />
+        ) : (
           <button
             onClick={doSearch}
-            disabled={searching || !row.name.trim()}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shrink-0"
-          >
-            {searching ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Search size={12} />
-            )}
-            Hämta priser
-          </button>
-        )}
-        {row.searched && (
-          <button
-            onClick={doSearch}
-            disabled={searching}
-            className="text-xs text-gray-500 hover:text-blue-600 px-2 py-1.5 shrink-0"
+            className="text-gray-400 hover:text-blue-600 shrink-0 text-xs px-1"
             title="Sök igen"
           >
-            {searching ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <>↻</>
-            )}
+            ↻
           </button>
         )}
       </div>
