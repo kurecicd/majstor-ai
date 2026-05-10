@@ -25,6 +25,7 @@ interface SearchHit {
   name?: string | null;
   price?: number | null;
   url?: string | null;
+  is_product_url?: boolean;
   image?: string | null;
   error?: string | null;
 }
@@ -121,7 +122,8 @@ export default function StepPricing({
         name: h.store,
         price: h.price ?? 0,
         url: h.url ?? h.search_url,
-        source: h.name ?? (h.error ? `Klicka för att söka: ${h.store}` : h.store),
+        source: h.name ?? (h.error ? undefined : h.store),
+        is_product_url: h.is_product_url ?? false,
         image: h.image ?? undefined,
       };
       if (existingIdx >= 0) newStores[existingIdx] = opt;
@@ -550,7 +552,7 @@ function StoreCard({
               <span className="font-bold text-gray-900 shrink-0">{fmt(option.price)} kr</span>
             )}
           </div>
-          {/* Product name = the link. Always visible, always clickable. */}
+          {/* Link — product page if found, otherwise honest search link */}
           <a
             href={option.url || "#"}
             target={option.url ? "_blank" : undefined}
@@ -558,9 +560,9 @@ function StoreCard({
             onClick={(e) => e.stopPropagation()}
             className="text-sm text-blue-600 hover:text-blue-800 underline block mt-0.5 truncate"
           >
-            {option.source && option.source !== option.name
-              ? option.source
-              : option.name}
+            {option.is_product_url
+              ? (option.source && option.source !== option.name ? option.source : option.name)
+              : `Sök på ${option.name} →`}
           </a>
         </div>
 

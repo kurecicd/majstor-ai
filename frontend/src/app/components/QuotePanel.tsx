@@ -5,6 +5,7 @@ export interface StoreOption {
   price: number;
   source?: string;
   url?: string;
+  is_product_url?: boolean;
   image?: string;
 }
 
